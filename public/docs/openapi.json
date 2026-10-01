@@ -1,0 +1,342 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Visor TV Enterprise — API RESTful",
+    "description": "Especificación formal de la API de Señalización Digital y Transmisión de Contenidos para Smart TVs y pantallas comerciales.\n\n**Desarrollado y Diseñado por Ashly Nicole**\n\n* Autenticación mediante Bearer Token (Sanctum)\n* Streaming HTTP 206 Partial Content (Range requests) y soporte HEAD\n* Sincronización dinámica Zero-Delay mediante firma MD5 de versión\n* Auditoría completa de eventos en tiempo real",
+    "version": "2.0.0",
+    "contact": {
+      "name": "Ashly Nicole — Lead Engineer",
+      "email": "ashly@visortv.com"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8000",
+      "description": "Servidor Local de Desarrollo"
+    },
+    {
+      "url": "/",
+      "description": "Servidor Relativo / Producción"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "Sanctum Token",
+        "description": "Ingresa el token obtenido en /api/auth/login"
+      }
+    },
+    "schemas": {
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "example": 1 },
+          "name": { "type": "string", "example": "Ashly Nicole" },
+          "username": { "type": "string", "example": "ashly" },
+          "email": { "type": "string", "example": "ashly@visortv.com" },
+          "role": { "type": "string", "enum": ["superadmin", "admin", "operator"], "example": "superadmin" },
+          "avatar": { "type": "string", "nullable": true },
+          "is_active": { "type": "boolean", "example": true },
+          "last_login_at": { "type": "string", "format": "date-time" },
+          "last_login_ip": { "type": "string", "example": "127.0.0.1" },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Sede": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "example": 1 },
+          "name": { "type": "string", "example": "Sede Principal (Centro)" },
+          "slug": { "type": "string", "example": "sede-principal" },
+          "description": { "type": "string", "example": "Recepción y salas de espera centrales" },
+          "address": { "type": "string", "example": "Av. Principal # 100 - Torre A" },
+          "color": { "type": "string", "example": "#2563eb" },
+          "icon": { "type": "string", "example": "Building2" },
+          "order_num": { "type": "integer", "example": 1 },
+          "is_active": { "type": "boolean", "example": true },
+          "total_media": { "type": "integer", "example": 5 },
+          "active_media": { "type": "integer", "example": 4 },
+          "created_by": { "type": "string", "example": "Ashly Nicole" }
+        }
+      },
+      "MediaItem": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "example": 1 },
+          "sede_id": { "type": "integer", "example": 1 },
+          "uploaded_by_user_id": { "type": "integer", "example": 1 },
+          "uploaded_by_name": { "type": "string", "example": "Ashly Nicole" },
+          "title": { "type": "string", "example": "Bienvenida Corporativa" },
+          "type": { "type": "string", "enum": ["video", "image"], "example": "video" },
+          "filename": { "type": "string", "example": "media_1789646565_t32qTw69.mp4" },
+          "url": { "type": "string", "example": "http://127.0.0.1:8000/api/media/stream/media_1789646565_t32qTw69.mp4" },
+          "thumbnail_url": { "type": "string", "example": "http://127.0.0.1:8000/api/media/stream/media_1789646565_t32qTw69.mp4?thumb=1" },
+          "original_name": { "type": "string", "example": "promo_tv.mp4" },
+          "mime_type": { "type": "string", "example": "video/mp4" },
+          "file_size": { "type": "integer", "example": 15485760 },
+          "formatted_size": { "type": "string", "example": "14.77 MB" },
+          "duration": { "type": "integer", "example": 0 },
+          "fit_mode": { "type": "string", "enum": ["contain", "cover", "fill"], "example": "contain" },
+          "resolution": { "type": "string", "example": "1920x1080" },
+          "order_num": { "type": "integer", "example": 1 },
+          "is_active": { "type": "boolean", "example": true }
+        }
+      },
+      "AuditLog": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer", "example": 1 },
+          "user_id": { "type": "integer", "example": 1 },
+          "user_name": { "type": "string", "example": "Ashly Nicole" },
+          "sede_id": { "type": "integer", "example": 1 },
+          "sede_name": { "type": "string", "example": "Sede Principal (Centro)" },
+          "action": { "type": "string", "example": "media.upload" },
+          "entity_type": { "type": "string", "example": "MediaItem" },
+          "entity_id": { "type": "integer", "example": 4 },
+          "description": { "type": "string", "example": "Ashly Nicole subió el contenido 'Video Informativo' en 'Sede Principal'" },
+          "details": { "type": "object" },
+          "ip_address": { "type": "string", "example": "127.0.0.1" },
+          "user_agent": { "type": "string", "example": "Mozilla/5.0..." },
+          "created_at_human": { "type": "string", "example": "hace 5 minutos" },
+          "created_at_formatted": { "type": "string", "example": "29/09/2026 21:05:00" }
+        }
+      },
+      "ApiResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "example": true },
+          "message": { "type": "string", "example": "Operación ejecutada exitosamente" }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "example": false },
+          "error": { "type": "string", "example": "Mensaje descriptivo del error" }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/api/auth/login": {
+      "post": {
+        "summary": "Iniciar Sesión",
+        "description": "Autentica al usuario y devuelve el token Bearer.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["username", "password"],
+                "properties": {
+                  "username": { "type": "string", "example": "ashly" },
+                  "password": { "type": "string", "example": "admin123" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Inicio de sesión exitoso" },
+          "401": { "description": "Credenciales inválidas" }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "summary": "Usuario Autenticado",
+        "description": "Obtiene la información del usuario en sesión activa.",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Datos de usuario obtenidos exitosamente" },
+          "401": { "description": "No autenticado" }
+        }
+      }
+    },
+    "/api/playlist": {
+      "get": {
+        "summary": "Programación para Smart TVs",
+        "description": "Entrega la lista activa para Smart TVs. Si check_version=1 devuelve solo el hash MD5 sin transferir el listado completo.",
+        "parameters": [
+          { "name": "slug", "in": "query", "schema": { "type": "string" }, "example": "sede-principal" },
+          { "name": "sede_id", "in": "query", "schema": { "type": "integer" }, "example": 1 },
+          { "name": "check_version", "in": "query", "schema": { "type": "integer", "enum": [0, 1] }, "example": 0 }
+        ],
+        "responses": {
+          "200": { "description": "Lista de reproducción y metadatos de sincronización" },
+          "404": { "description": "Sede no encontrada" }
+        }
+      }
+    },
+    "/api/media/stream/{filename}": {
+      "get": {
+        "summary": "Streaming HTTP 206 / HEAD",
+        "description": "Transmite el video o imagen en bloques de 512 KB con soporte de cabeceras Range, ETag y HEAD para Smart TVs.",
+        "parameters": [
+          { "name": "filename", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "thumb", "in": "query", "schema": { "type": "integer", "enum": [0, 1] } }
+        ],
+        "responses": {
+          "200": { "description": "Contenido completo" },
+          "206": { "description": "Fragmento solicitado (Partial Content)" },
+          "304": { "description": "No modificado (Caché válida)" }
+        }
+      }
+    },
+    "/api/sedes": {
+      "get": {
+        "summary": "Listar Sedes",
+        "description": "Devuelve todas las sedes registradas en el sistema.",
+        "parameters": [
+          { "name": "public", "in": "query", "schema": { "type": "integer", "enum": [0, 1] } }
+        ],
+        "responses": { "200": { "description": "Lista de sedes" } }
+      },
+      "post": {
+        "summary": "Crear Sede",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                  "name": { "type": "string", "example": "Sede Innovación" },
+                  "slug": { "type": "string", "example": "sede-innovacion" },
+                  "description": { "type": "string" },
+                  "address": { "type": "string" },
+                  "color": { "type": "string", "example": "#3b82f6" },
+                  "icon": { "type": "string", "example": "Sparkles" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Sede creada" } }
+      }
+    },
+    "/api/media": {
+      "get": {
+        "summary": "Listar Medios de Sede",
+        "parameters": [
+          { "name": "sede_id", "in": "query", "required": true, "schema": { "type": "integer" } },
+          { "name": "active_only", "in": "query", "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "Lista de medios" } }
+      },
+      "post": {
+        "summary": "Subir Archivo Multimedia",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["sede_id", "file"],
+                "properties": {
+                  "sede_id": { "type": "integer" },
+                  "file": { "type": "string", "format": "binary" },
+                  "title": { "type": "string" },
+                  "duration": { "type": "integer", "default": 10 },
+                  "fit_mode": { "type": "string", "enum": ["contain", "cover", "fill"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Archivo cargado" } }
+      }
+    },
+    "/api/media/add-url": {
+      "post": {
+        "summary": "Agregar Enlace Web Externo",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["sede_id", "url"],
+                "properties": {
+                  "sede_id": { "type": "integer" },
+                  "url": { "type": "string", "format": "uri" },
+                  "title": { "type": "string" },
+                  "type": { "type": "string", "enum": ["video", "image"] },
+                  "duration": { "type": "integer" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Enlace agregado" } }
+      }
+    },
+    "/api/audit-logs": {
+      "get": {
+        "summary": "Consultar Auditoría del Sistema",
+        "description": "Obtiene el registro histórico de quién agregó, editó o eliminó medios o sedes.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "sede_id", "in": "query", "schema": { "type": "integer" } },
+          { "name": "user_id", "in": "query", "schema": { "type": "integer" } },
+          { "name": "action", "in": "query", "schema": { "type": "string" } },
+          { "name": "search", "in": "query", "schema": { "type": "string" } },
+          { "name": "page", "in": "query", "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "Logs de auditoría paginados" } }
+      }
+    },
+    "/api/users": {
+      "get": {
+        "summary": "Listar Usuarios",
+        "security": [{ "BearerAuth": [] }],
+        "responses": { "200": { "description": "Lista de usuarios del sistema" } }
+      },
+      "post": {
+        "summary": "Crear Usuario",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "username", "password"],
+                "properties": {
+                  "name": { "type": "string", "example": "Carlos Operador" },
+                  "username": { "type": "string", "example": "carlos" },
+                  "email": { "type": "string", "example": "carlos@visortv.com" },
+                  "password": { "type": "string", "example": "clave123" },
+                  "role": { "type": "string", "enum": ["superadmin", "admin", "operator"], "default": "operator" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Usuario creado" } }
+      }
+    },
+    "/api/stats": {
+      "get": {
+        "summary": "Estadísticas del Dashboard",
+        "description": "Devuelve conteos de sedes, medios, usuarios, actividad reciente y estado del servidor.",
+        "responses": { "200": { "description": "Estadísticas generales" } }
+      }
+    },
+    "/api/settings": {
+      "get": { "summary": "Obtener Configuraciones", "responses": { "200": { "description": "Ajustes del sistema" } } },
+      "post": {
+        "summary": "Guardar Configuraciones",
+        "security": [{ "BearerAuth": [] }],
+        "responses": { "200": { "description": "Ajustes guardados" } }
+      }
+    }
+  }
+}

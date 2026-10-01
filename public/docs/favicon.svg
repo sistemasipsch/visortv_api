@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="100%" height="100%">
+  <defs>
+    <!-- Background & Screen Gradients -->
+    <linearGradient id="tvBezel" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b" />
+      <stop offset="50%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#020617" />
+    </linearGradient>
+    <linearGradient id="screenGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="40%" stop-color="#1e1b4b" />
+      <stop offset="100%" stop-color="#090d16" />
+    </linearGradient>
+    <linearGradient id="neonBorder" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="50%" stop-color="#6366f1" />
+      <stop offset="100%" stop-color="#a855f7" />
+    </linearGradient>
+    <linearGradient id="playGlyph" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="50%" stop-color="#3b82f6" />
+      <stop offset="100%" stop-color="#8b5cf6" />
+    </linearGradient>
+    <linearGradient id="standGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#334155" />
+      <stop offset="50%" stop-color="#64748b" />
+      <stop offset="100%" stop-color="#334155" />
+    </linearGradient>
+    <filter id="neonGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3.5" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- TV Outer Bezel Frame -->
+  <rect x="12" y="16" width="104" height="76" rx="16" fill="url(#tvBezel)" stroke="url(#neonBorder)" stroke-width="2.5" />
+
+  <!-- TV Screen Inner Area -->
+  <rect x="18" y="22" width="92" height="64" rx="11" fill="url(#screenGrad)" />
+
+  <!-- TV Screen Glass Reflection Accent -->
+  <path d="M 20 24 L 98 24 C 90 44, 40 54, 20 54 Z" fill="white" opacity="0.04" />
+
+  <!-- Live Broadcast Waves / Signal Aura (Top Right) -->
+  <path d="M 94 28 A 12 12 0 0 1 104 38" fill="none" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" opacity="0.85" />
+  <path d="M 88 30 A 6 6 0 0 1 93 35" fill="none" stroke="#22d3ee" stroke-width="2" stroke-linecap="round" opacity="0.9" />
+
+  <!-- Center Futuristic Neon Play Triangle -->
+  <polygon points="54,38 84,54 54,70" fill="url(#playGlyph)" filter="url(#neonGlow)" />
+  <polygon points="56,41 81,54 56,67" fill="#ffffff" opacity="0.3" />
+
+  <!-- Active Broadcast Status Pulse Dot -->
+  <circle cx="28" cy="74" r="3" fill="#22c55e" filter="url(#neonGlow)" />
+
+  <!-- TV Neck Stand -->
+  <rect x="58" y="92" width="12" height="10" rx="2" fill="url(#standGrad)" />
+
+  <!-- TV Base Platform Stand -->
+  <rect x="42" y="102" width="44" height="6" rx="3" fill="url(#standGrad)" />
+</svg>
