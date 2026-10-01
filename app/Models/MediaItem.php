@@ -75,7 +75,13 @@ class MediaItem extends Model
         }
 
         // Local media served via high-speed streaming endpoint
-        return '/api/media/stream/' . rawurlencode($fn);
+        $path = '/api/media/stream/' . rawurlencode($fn);
+        $baseUrl = config('app.url');
+        if (!empty($baseUrl) && $baseUrl !== 'http://localhost' && $baseUrl !== 'http://127.0.0.1:8000') {
+            return rtrim($baseUrl, '/') . $path;
+        }
+
+        return url($path);
     }
 
     public function getThumbnailUrlAttribute(): string
@@ -90,7 +96,12 @@ class MediaItem extends Model
         }
 
         if ($this->type === 'image') {
-            return '/api/media/stream/' . rawurlencode($fn) . '?thumb=1';
+            $path = '/api/media/stream/' . rawurlencode($fn) . '?thumb=1';
+            $baseUrl = config('app.url');
+            if (!empty($baseUrl) && $baseUrl !== 'http://localhost' && $baseUrl !== 'http://127.0.0.1:8000') {
+                return rtrim($baseUrl, '/') . $path;
+            }
+            return url($path);
         }
 
         return $this->url;

@@ -75,4 +75,23 @@ class User extends Authenticatable
     {
         return in_array($this->role, ['superadmin', 'admin']);
     }
+
+    public function getAvatarAttribute($value): ?string
+    {
+        if (empty($value)) {
+            return null;
+        }
+
+        if (str_starts_with($value, 'http://') || str_starts_with($value, 'https://') || str_starts_with($value, 'data:')) {
+            return $value;
+        }
+
+        $path = str_starts_with($value, '/') ? $value : ('/api/media/stream/' . rawurlencode($value));
+        $baseUrl = config('app.url');
+        if (!empty($baseUrl) && $baseUrl !== 'http://localhost' && $baseUrl !== 'http://127.0.0.1:8000') {
+            return rtrim($baseUrl, '/') . (str_starts_with($path, '/') ? '' : '/') . $path;
+        }
+
+        return url($path);
+    }
 }
