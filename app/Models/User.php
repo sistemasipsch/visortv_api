@@ -82,10 +82,17 @@ class User extends Authenticatable
             return null;
         }
 
-        if (str_starts_with($value, 'http://') || str_starts_with($value, 'https://') || str_starts_with($value, 'data:')) {
+        // Return full URLs, data URIs and blob URIs as-is
+        if (str_starts_with($value, 'http://') || str_starts_with($value, 'https://') || str_starts_with($value, 'data:') || str_starts_with($value, 'blob:')) {
             return $value;
         }
 
+        // Return preset avatar identifiers (e.g. avatar-code, avatar-crown) as-is
+        if (str_starts_with($value, 'avatar-') || str_starts_with($value, 'icon-')) {
+            return $value;
+        }
+
+        // Local uploaded media file
         $path = str_starts_with($value, '/') ? $value : ('/api/media/stream/' . rawurlencode($value));
         $baseUrl = config('app.url');
         if (!empty($baseUrl) && $baseUrl !== 'http://localhost' && $baseUrl !== 'http://127.0.0.1:8000') {
