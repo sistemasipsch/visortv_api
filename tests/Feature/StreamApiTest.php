@@ -126,6 +126,26 @@ class StreamApiTest extends TestCase
         $response->assertRedirect('https://cdn.example.com/video.mp4');
     }
 
+    public function test_stream_video_ignores_if_none_match_and_streams_without_304(): void
+    {
+        $filename = 'test_loop_video.mp4';
+        $videoData = str_repeat('V', 2048);
+        Storage::disk('public')->put('media/' . $filename, $videoData);
+
+        $initialResponse = $this->get('/api/media/stream/' . $filename);
+        $initialResponse->assertStatus(200);
+        $etag = $initialResponse->headers->get('ETag');
+        $this->assertNotEmpty($etag);
+
+        // Videos in loops MUST NOT return 304 because HTML5 <video> aborts with MEDIA_ERR_SRC_NOT_SUPPORTED
+        $subsequentResponse = $this->withHeaders([
+            'If-None-Match' => $etag,
+        ])->get('/api/media/stream/' . $filename);
+
+        $this->assertNotEquals(304, $subsequentResponse->getStatusCode());
+        $this->assertEquals(200, $subsequentResponse->getStatusCode());
+    }
+
     public function test_stream_thumbnail_fallback_to_original(): void
     {
         $filename = 'banner.jpg';

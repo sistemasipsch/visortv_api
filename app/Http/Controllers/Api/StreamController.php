@@ -99,18 +99,18 @@ class StreamController extends Controller
         $etag = '"' . md5($filePath . filemtime($filePath) . $fileSize) . '"';
         $lastModified = gmdate('D, d M Y H:i:s', filemtime($filePath)) . ' GMT';
 
-        // 304 Not Modified check for high-speed client caching
-        if ($request->header('If-None-Match') === $etag || $request->header('If-Modified-Since') === $lastModified) {
-            return response('', 304, [
-                'ETag' => $etag,
-                'Last-Modified' => $lastModified,
-                'Cache-Control' => 'public, max-age=31536000, immutable',
-                'Access-Control-Allow-Origin' => '*',
-            ]);
-        }
-
         // For non-video files (images, svg), send cached response or HEAD response
         if (!str_starts_with($mimeType, 'video/')) {
+            // 304 Not Modified check for high-speed client caching of static assets
+            if ($request->header('If-None-Match') === $etag || $request->header('If-Modified-Since') === $lastModified) {
+                return response('', 304, [
+                    'ETag' => $etag,
+                    'Last-Modified' => $lastModified,
+                    'Cache-Control' => 'public, max-age=31536000, immutable',
+                    'Access-Control-Allow-Origin' => '*',
+                ]);
+            }
+
             $imageHeaders = [
                 'Content-Type' => $mimeType,
                 'Content-Length' => $fileSize,
@@ -172,6 +172,11 @@ class StreamController extends Controller
         }
 
         return new StreamedResponse(function () use ($filePath, $start, $length) {
+            // Discard any active PHP output buffers to prevent memory spikes and streaming delays
+            while (ob_get_level() > 0) {
+                ob_end_clean();
+            }
+
             $handle = fopen($filePath, 'rb');
             if ($handle === false) {
                 return;
