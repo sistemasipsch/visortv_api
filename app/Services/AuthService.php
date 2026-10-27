@@ -3,8 +3,13 @@
 namespace App\Services;
 
 use App\Models\User;
+use App\Mail\PasswordResetCodeMail;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\PersonalAccessToken;
 
@@ -150,6 +155,163 @@ class AuthService
         );
 
         return $user;
+    }
+
+    /**
+     * Send password reset code (6 digits) via email or return hint/dev code
+     */
+    public function sendResetCode(string $identifier): array
+    {
+        $identifier = trim($identifier);
+
+        $user = User::where('username', $identifier)
+            ->orWhere('email', $identifier)
+            ->first();
+
+        if (!$user) {
+            throw ValidationException::withMessages([
+                'username' => ['No se encontró ningún usuario con ese nombre de usuario o correo electrónico.'],
+            ]);
+        }
+
+        if (!$user->is_active) {
+            throw ValidationException::withMessages([
+                'username' => ['Esta cuenta de usuario se encuentra temporalmente inactiva. Contacte al administrador.'],
+            ]);
+        }
+
+        // Generate a cryptographically secure 6-digit numeric code
+        $code = sprintf('%06d', random_int(100000, 999999));
+        $tokenKey = $user->email ?: $user->username;
+
+        // Upsert into password_reset_tokens
+        DB::table('password_reset_tokens')->updateOrInsert(
+            ['email' => $tokenKey],
+            [
+                'token' => Hash::make($code),
+                'created_at' => now(),
+            ]
+        );
+
+        // Generate masked email hint if email exists
+        $maskedEmail = null;
+        if (!empty($user->email)) {
+            $parts = explode('@', $user->email);
+            $name = $parts[0];
+            $domain = $parts[1] ?? '';
+            $len = strlen($name);
+            if ($len <= 2) {
+                $maskedName = substr($name, 0, 1) . '*';
+            } else {
+                $maskedName = substr($name, 0, 1) . str_repeat('*', max(1, $len - 2)) . substr($name, -1);
+            }
+            $maskedEmail = $maskedName . '@' . $domain;
+        }
+
+        // Attempt sending email if email address is configured
+        $emailSent = false;
+        if (!empty($user->email)) {
+            try {
+                Mail::to($user->email)->send(new PasswordResetCodeMail($user, $code));
+                $emailSent = true;
+            } catch (\Throwable $e) {
+                Log::warning("Error enviando correo de recuperación a {$user->email}: " . $e->getMessage());
+            }
+        }
+
+        AuditService::log(
+            'auth.password_reset_requested',
+            "Se solicitó código de recuperación de contraseña para {$user->name} (@{$user->username})",
+            $user,
+            null,
+            ['email_sent' => $emailSent, 'has_email' => !empty($user->email)],
+            $user
+        );
+
+        $isDevOrLog = config('app.debug') || config('mail.default') === 'log' || app()->environment('testing', 'local');
+
+        $message = !empty($user->email)
+            ? ($emailSent
+                ? "Hemos enviado un código de verificación de 6 dígitos a su correo {$maskedEmail}."
+                : "Se generó el código de verificación para {$maskedEmail}. (Servicio de correo no disponible o en modo registro).")
+            : "Se generó el código de verificación para el usuario @{$user->username}.";
+
+        return [
+            'success' => true,
+            'message' => $message,
+            'has_email' => !empty($user->email),
+            'email_hint' => $maskedEmail,
+            'username' => $user->username,
+            'dev_code' => $isDevOrLog ? $code : null,
+        ];
+    }
+
+    /**
+     * Reset password using 6-digit code
+     */
+    public function resetPasswordWithCode(string $identifier, string $code, string $newPassword): array
+    {
+        $identifier = trim($identifier);
+        $code = trim($code);
+
+        $user = User::where('username', $identifier)
+            ->orWhere('email', $identifier)
+            ->first();
+
+        if (!$user) {
+            throw ValidationException::withMessages([
+                'username' => ['No se encontró ningún usuario con ese identificador.'],
+            ]);
+        }
+
+        $tokenKey = $user->email ?: $user->username;
+
+        $record = DB::table('password_reset_tokens')->where('email', $tokenKey)->first();
+
+        if (!$record) {
+            throw ValidationException::withMessages([
+                'code' => ['No se ha solicitado un código de recuperación o ya ha sido utilizado.'],
+            ]);
+        }
+
+        // Check if code has expired (15 minutes lifespan)
+        $createdAt = Carbon::parse($record->created_at);
+        if ($createdAt->addMinutes(15)->isPast()) {
+            DB::table('password_reset_tokens')->where('email', $tokenKey)->delete();
+            throw ValidationException::withMessages([
+                'code' => ['El código de verificación ha expirado (validez: 15 minutos). Por favor solicita uno nuevo.'],
+            ]);
+        }
+
+        // Validate code hash
+        if (!Hash::check($code, $record->token)) {
+            throw ValidationException::withMessages([
+                'code' => ['El código de verificación de 6 dígitos es incorrecto.'],
+            ]);
+        }
+
+        // Update password
+        $user->password = Hash::make($newPassword);
+        $user->save();
+
+        // Delete token and invalidate active sessions/tokens
+        DB::table('password_reset_tokens')->where('email', $tokenKey)->delete();
+        $user->tokens()->delete();
+
+        AuditService::log(
+            'auth.password_reset_completed',
+            "{$user->name} (@{$user->username}) restableció exitosamente su contraseña",
+            $user,
+            null,
+            [],
+            $user
+        );
+
+        return [
+            'success' => true,
+            'message' => 'Contraseña restablecida exitosamente. Ya puedes iniciar sesión con tu nueva contraseña.',
+            'username' => $user->username,
+        ];
     }
 
     /**

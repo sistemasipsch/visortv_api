@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\ChangePasswordRequest;
+use App\Http\Requests\Auth\ForgotPasswordRequest;
 use App\Http\Requests\Auth\LoginRequest;
+use App\Http\Requests\Auth\ResetPasswordWithCodeRequest;
 use App\Http\Requests\Auth\UpdateProfileRequest;
 use App\Http\Resources\UserResource;
 use App\Services\AuthService;
@@ -28,6 +30,8 @@ class AuthController extends Controller
         $action = $request->query('action', 'login');
         return match ($action) {
             'login' => $this->login(app(LoginRequest::class)),
+            'forgot-password' => $this->forgotPassword(app(ForgotPasswordRequest::class)),
+            'reset-password' => $this->resetPassword(app(ResetPasswordWithCodeRequest::class)),
             'me' => $this->me($request),
             'logout' => $this->logout($request),
             'change-password' => $this->changePassword(app(ChangePasswordRequest::class)),
@@ -62,6 +66,32 @@ class AuthController extends Controller
             'token' => $result['token'],
             'user' => new UserResource($result['user']),
         ]);
+    }
+
+    /**
+     * Request Password Reset Code
+     */
+    public function forgotPassword(ForgotPasswordRequest $request): JsonResponse
+    {
+        $validated = $request->validated();
+        $result = $this->authService->sendResetCode($validated['username']);
+
+        return response()->json($result);
+    }
+
+    /**
+     * Reset Password using Code
+     */
+    public function resetPassword(ResetPasswordWithCodeRequest $request): JsonResponse
+    {
+        $validated = $request->validated();
+        $result = $this->authService->resetPasswordWithCode(
+            $validated['username'],
+            $validated['code'],
+            $validated['new_password']
+        );
+
+        return response()->json($result);
     }
 
     /**
