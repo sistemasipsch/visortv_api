@@ -20,7 +20,7 @@ class DatabaseSeeder extends Seeder
             [
                 'name' => 'Ashly Nicole',
                 'email' => 'ashly@visortv.com',
-                'password' => Hash::make('admin123'),
+                'password' => Hash::make('Ashly2026*'),
                 'role' => 'superadmin',
                 'is_active' => true,
                 'avatar' => null,

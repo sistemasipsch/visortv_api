@@ -208,14 +208,17 @@ class AuthService
             $maskedEmail = $maskedName . '@' . $domain;
         }
 
-        // Attempt sending email if email address is configured
+        // Attempt sending email if email address is configured AND mailer is not 'log'
         $emailSent = false;
-        if (!empty($user->email)) {
+        $isLogMailer = config('mail.default') === 'log' || config('mail.mailer') === 'log';
+
+        if (!empty($user->email) && !$isLogMailer) {
             try {
                 Mail::to($user->email)->send(new PasswordResetCodeMail($user, $code));
                 $emailSent = true;
             } catch (\Throwable $e) {
                 Log::warning("Error enviando correo de recuperación a {$user->email}: " . $e->getMessage());
+                $emailSent = false;
             }
         }
 
@@ -224,25 +227,27 @@ class AuthService
             "Se solicitó código de recuperación de contraseña para {$user->name} (@{$user->username})",
             $user,
             null,
-            ['email_sent' => $emailSent, 'has_email' => !empty($user->email)],
+            ['email_sent' => $emailSent, 'has_email' => !empty($user->email), 'is_log_mailer' => $isLogMailer],
             $user
         );
 
-        $isDevOrLog = config('app.debug') || config('mail.default') === 'log' || app()->environment('testing', 'local');
+        // If email was not dispatched over SMTP, or in dev/log/testing mode, always provide code fallback
+        $shouldProvideFallbackCode = !$emailSent || $isLogMailer || config('app.debug') || app()->environment('testing', 'local');
 
-        $message = !empty($user->email)
-            ? ($emailSent
-                ? "Hemos enviado un código de verificación de 6 dígitos a su correo {$maskedEmail}."
-                : "Se generó el código de verificación para {$maskedEmail}. (Servicio de correo no disponible o en modo registro).")
-            : "Se generó el código de verificación para el usuario @{$user->username}.";
+        $message = $emailSent
+            ? "Hemos enviado un código de verificación de 6 dígitos a su correo {$maskedEmail}."
+            : (!empty($user->email)
+                ? "Servicio de correo SMTP en modo registro o no configurado. Utilice el código de verificación generado en pantalla."
+                : "Se generó el código de verificación para el usuario @{$user->username}.");
 
         return [
             'success' => true,
             'message' => $message,
             'has_email' => !empty($user->email),
+            'email_sent' => $emailSent,
             'email_hint' => $maskedEmail,
             'username' => $user->username,
-            'dev_code' => $isDevOrLog ? $code : null,
+            'dev_code' => $shouldProvideFallbackCode ? $code : null,
         ];
     }
 
