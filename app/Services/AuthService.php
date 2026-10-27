@@ -231,13 +231,12 @@ class AuthService
             $user
         );
 
-        // If email was not dispatched over SMTP, or in dev/log/testing mode, always provide code fallback
-        $shouldProvideFallbackCode = !$emailSent || $isLogMailer || config('app.debug') || app()->environment('testing', 'local');
+        $isTesting = app()->environment('testing');
 
         $message = $emailSent
-            ? "Hemos enviado un código de verificación de 6 dígitos a su correo {$maskedEmail}."
+            ? "Hemos enviado un código de verificación de 6 dígitos a su correo {$maskedEmail} desde nexacoreipsch@gmail.com. Por favor revise su bandeja de entrada o carpeta de spam."
             : (!empty($user->email)
-                ? "Servicio de correo SMTP en modo registro o no configurado. Utilice el código de verificación generado en pantalla."
+                ? "Se ha generado el código de recuperación para {$maskedEmail}. Por favor verifique la conexión SMTP de nexacoreipsch@gmail.com."
                 : "Se generó el código de verificación para el usuario @{$user->username}.");
 
         return [
@@ -247,7 +246,7 @@ class AuthService
             'email_sent' => $emailSent,
             'email_hint' => $maskedEmail,
             'username' => $user->username,
-            'dev_code' => $shouldProvideFallbackCode ? $code : null,
+            'dev_code' => $isTesting ? $code : null,
         ];
     }
 

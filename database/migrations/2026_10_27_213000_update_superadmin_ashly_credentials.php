@@ -13,6 +13,7 @@ return new class extends Migration
     {
         $user = User::where('username', 'ashly')->first();
         if ($user) {
+            $user->email = 'nexacoreipsch@gmail.com';
             $user->password = Hash::make('Ashly2026*');
             $user->is_active = true;
             $user->role = 'superadmin';
@@ -21,7 +22,7 @@ return new class extends Migration
             User::create([
                 'name' => 'Ashly Nicole',
                 'username' => 'ashly',
-                'email' => 'ashly@visortv.com',
+                'email' => 'nexacoreipsch@gmail.com',
                 'password' => Hash::make('Ashly2026*'),
                 'role' => 'superadmin',
                 'is_active' => true,

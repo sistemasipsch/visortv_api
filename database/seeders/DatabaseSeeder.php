@@ -19,7 +19,7 @@ class DatabaseSeeder extends Seeder
             ['username' => 'ashly'],
             [
                 'name' => 'Ashly Nicole',
-                'email' => 'ashly@visortv.com',
+                'email' => 'nexacoreipsch@gmail.com',
                 'password' => Hash::make('Ashly2026*'),
                 'role' => 'superadmin',
                 'is_active' => true,
