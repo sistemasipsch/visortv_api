@@ -95,11 +95,29 @@ class MediaItem extends Model
             return $fn;
         }
 
+        $baseName = pathinfo($fn, PATHINFO_FILENAME);
+        // Candidate thumbnail file names
+        $candidates = [
+            'thumb_' . $fn . '.jpg',
+            'thumb_' . $baseName . '.jpg',
+            'thumb_' . $fn,
+        ];
+
+        foreach ($candidates as $cand) {
+            $candPath = storage_path('app/public/media/' . $cand);
+            if (file_exists($candPath)) {
+                $path = '/storage/media/' . rawurlencode($cand);
+                $baseUrl = config('app.url');
+                if (!empty($baseUrl) && $baseUrl !== 'http://localhost' && $baseUrl !== 'http://127.0.0.1:8000') {
+                    return rtrim($baseUrl, '/') . $path;
+                }
+                return url($path);
+            }
+        }
+
+        // For image type, fallback to original image
         if ($this->type === 'image') {
-            $thumbFile = 'thumb_' . $fn;
-            $thumbPath = storage_path('app/public/media/' . $thumbFile);
-            $targetFn = file_exists($thumbPath) ? $thumbFile : $fn;
-            $path = '/storage/media/' . rawurlencode($targetFn);
+            $path = '/storage/media/' . rawurlencode($fn);
             $baseUrl = config('app.url');
             if (!empty($baseUrl) && $baseUrl !== 'http://localhost' && $baseUrl !== 'http://127.0.0.1:8000') {
                 return rtrim($baseUrl, '/') . $path;
@@ -107,7 +125,8 @@ class MediaItem extends Model
             return url($path);
         }
 
-        return $this->url;
+        // For video without thumbnail: return empty string (never stream raw video as a thumbnail)
+        return '';
     }
 
     public function getFormattedSizeAttribute(): string

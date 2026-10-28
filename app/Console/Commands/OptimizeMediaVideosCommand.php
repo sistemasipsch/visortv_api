@@ -11,9 +11,10 @@ class OptimizeMediaVideosCommand extends Command
 {
     protected $signature = 'media:optimize-videos 
                             {--crf=23 : Factor de calidad CRF (18-28, por defecto 23)}
-                            {--force : Forzar optimizacion en todos los videos}';
+                            {--force : Forzar optimizacion en todos los videos}
+                            {--thumbnails-only : Solo generar miniaturas JPEG para los videos}';
 
-    protected $description = 'Optimiza y comprime videos a 1080p H.264 con FastStart manteniendo maxima nitidez y reduciendo hasta 85% de peso para Smart TVs';
+    protected $description = 'Optimiza y comprime videos a 1080p H.264 con FastStart y genera miniaturas ultralivianas de 8KB para Smart TVs';
 
     public function handle(): int
     {
@@ -23,7 +24,7 @@ class OptimizeMediaVideosCommand extends Command
         $this->newLine();
 
         // 1. Verificar disponibilidad de FFmpeg
-        $ffmpegBinary = $this->findFFmpeg();
+        $ffmpegBinary = self::findFFmpeg();
         if (!$ffmpegBinary) {
             $this->error('[ERROR] FFmpeg no esta disponible en el PATH del sistema.');
             $this->line('Para instalarlo en Windows, ejecute en PowerShell:');
@@ -43,15 +44,49 @@ class OptimizeMediaVideosCommand extends Command
         $extensions = ['mp4', 'mov', 'webm', 'mkv', 'avi'];
         $files = File::files($mediaDir);
         $videoFiles = array_filter($files, function ($f) use ($extensions) {
-            return in_array(strtolower($f->getExtension()), $extensions) && !str_starts_with($f->getFilename(), 'temp_opt_');
+            $fn = $f->getFilename();
+            return in_array(strtolower($f->getExtension()), $extensions) 
+                && !str_starts_with($fn, 'temp_opt_')
+                && !str_starts_with($fn, 'thumb_');
         });
 
         if (empty($videoFiles)) {
-            $this->info('No se encontraron videos para optimizar en almacenamiento.');
+            $this->info('No se encontraron videos para procesar en almacenamiento.');
             return Command::SUCCESS;
         }
 
         $this->info('Se encontraron ' . count($videoFiles) . ' archivo(s) de video.');
+
+        // Si solo se solicitan miniaturas
+        if ($this->option('thumbnails-only')) {
+            $this->info('Modo: Generacion de miniaturas JPEG livianas (8KB)...');
+            $countThumbs = 0;
+            foreach ($videoFiles as $video) {
+                $filePath = $video->getRealPath();
+                $filename = $video->getFilename();
+                $thumbPath = $mediaDir . DIRECTORY_SEPARATOR . 'thumb_' . $filename . '.jpg';
+
+                if (file_exists($thumbPath) && !$this->option('force')) {
+                    continue;
+                }
+
+                $cmd = sprintf(
+                    '"%s" -ss 00:00:01 -i "%s" -vframes 1 -vf "scale=320:-1" -q:v 3 "%s" -y 2>&1',
+                    $ffmpegBinary,
+                    $filePath,
+                    $thumbPath
+                );
+                @exec($cmd);
+
+                if (file_exists($thumbPath)) {
+                    $countThumbs++;
+                    $this->line("  [THUMB] Creada miniatura para: {$filename} (" . $this->formatBytes(filesize($thumbPath)) . ")");
+                }
+            }
+            $this->info("Miniaturas procesadas exitosamente: {$countThumbs} generadas.");
+            return Command::SUCCESS;
+        }
+
         $crf = (int) $this->option('crf');
         if ($crf < 18 || $crf > 32) {
             $crf = 23;
@@ -115,6 +150,18 @@ class OptimizeMediaVideosCommand extends Command
                 }
                 $totalOptimized += $originalSize;
             }
+
+            // Asegurar que exista miniatura JPEG ultraliviana (8 KB)
+            $thumbPath = $mediaDir . DIRECTORY_SEPARATOR . 'thumb_' . $filename . '.jpg';
+            if (!file_exists($thumbPath) || $this->option('force')) {
+                $thumbCmd = sprintf(
+                    '"%s" -ss 00:00:01 -i "%s" -vframes 1 -vf "scale=320:-1" -q:v 3 "%s" -y 2>&1',
+                    $ffmpegBinary,
+                    $originalPath,
+                    $thumbPath
+                );
+                @exec($thumbCmd);
+            }
         }
 
         $this->newLine();
@@ -131,7 +178,7 @@ class OptimizeMediaVideosCommand extends Command
         return Command::SUCCESS;
     }
 
-    protected function findFFmpeg(): ?string
+    public static function findFFmpeg(): ?string
     {
         // 1. En PATH
         $paths = explode(PATH_SEPARATOR, getenv('PATH') ?: '');

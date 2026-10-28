@@ -93,6 +93,23 @@ class MediaService
             } catch (\Throwable $e) {
                 Log::warning("No se pudo optimizar la imagen {$storedFilename}: " . $e->getMessage());
             }
+        } elseif ($type === 'video') {
+            try {
+                $ffmpegBinary = \App\Console\Commands\OptimizeMediaVideosCommand::findFFmpeg();
+                if ($ffmpegBinary) {
+                    $fullPath = Storage::disk('public')->path($path);
+                    $thumbPath = Storage::disk('public')->path('media/thumb_' . $storedFilename . '.jpg');
+                    $cmd = sprintf(
+                        '"%s" -ss 00:00:01 -i "%s" -vframes 1 -vf "scale=320:-1" -q:v 3 "%s" -y 2>&1',
+                        $ffmpegBinary,
+                        $fullPath,
+                        $thumbPath
+                    );
+                    @exec($cmd);
+                }
+            } catch (\Throwable $e) {
+                Log::warning("No se pudo generar miniatura para el video {$storedFilename}: " . $e->getMessage());
+            }
         }
 
         $orderNum = isset($attributes['order_num'])
