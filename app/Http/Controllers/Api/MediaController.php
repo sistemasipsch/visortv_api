@@ -75,7 +75,7 @@ class MediaController extends Controller
     }
 
     /**
-     * List media items for a sede
+     * List media items for a sede with enriched server-side context
      */
     public function index(Request $request): JsonResponse
     {
@@ -87,9 +87,35 @@ class MediaController extends Controller
         $activeOnly = $request->query('active_only') === '1';
         $items = $this->mediaService->getBySede((int) $sedeId, $activeOnly);
 
+        $currentSede = \App\Models\Sede::withCount([
+            'mediaItems as total_media',
+            'activeMediaItems as active_media',
+            'mediaItems as total_videos' => function ($q) {
+                $q->where('type', 'video');
+            },
+            'mediaItems as total_images' => function ($q) {
+                $q->where('type', 'image');
+            },
+        ])->find((int) $sedeId);
+
+        $availableSedes = \App\Models\Sede::withCount('mediaItems as total_media')
+            ->orderBy('order_num', 'asc')
+            ->orderBy('id', 'asc')
+            ->get(['id', 'name', 'slug', 'color', 'is_active']);
+
+        $totalBytes = $items->sum('file_size');
+
         return response()->json([
             'success' => true,
             'data' => MediaItemResource::collection($items),
+            'current_sede' => $currentSede,
+            'available_sedes' => $availableSedes,
+            'summary' => [
+                'total_items' => $items->count(),
+                'active_items' => $items->where('is_active', true)->count(),
+                'inactive_items' => $items->where('is_active', false)->count(),
+                'total_bytes' => $totalBytes,
+            ],
         ]);
     }
 

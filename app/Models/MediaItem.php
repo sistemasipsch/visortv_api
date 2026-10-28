@@ -74,14 +74,8 @@ class MediaItem extends Model
             return $fn;
         }
 
-        // Direct static media URL served directly by web server (Apache/LiteSpeed/Nginx) with zero PHP overhead
-        $path = '/storage/media/' . rawurlencode($fn);
-        $baseUrl = config('app.url');
-        if (!empty($baseUrl) && $baseUrl !== 'http://localhost' && $baseUrl !== 'http://127.0.0.1:8000') {
-            return rtrim($baseUrl, '/') . $path;
-        }
-
-        return url($path);
+        // Direct clean static URL served by web server / proxy without origin or IP mismatch
+        return '/storage/media/' . rawurlencode($fn);
     }
 
     public function getThumbnailUrlAttribute(): string
@@ -106,23 +100,13 @@ class MediaItem extends Model
         foreach ($candidates as $cand) {
             $candPath = storage_path('app/public/media/' . $cand);
             if (file_exists($candPath)) {
-                $path = '/storage/media/' . rawurlencode($cand);
-                $baseUrl = config('app.url');
-                if (!empty($baseUrl) && $baseUrl !== 'http://localhost' && $baseUrl !== 'http://127.0.0.1:8000') {
-                    return rtrim($baseUrl, '/') . $path;
-                }
-                return url($path);
+                return '/storage/media/' . rawurlencode($cand);
             }
         }
 
         // For image type, fallback to original image
         if ($this->type === 'image') {
-            $path = '/storage/media/' . rawurlencode($fn);
-            $baseUrl = config('app.url');
-            if (!empty($baseUrl) && $baseUrl !== 'http://localhost' && $baseUrl !== 'http://127.0.0.1:8000') {
-                return rtrim($baseUrl, '/') . $path;
-            }
-            return url($path);
+            return '/storage/media/' . rawurlencode($fn);
         }
 
         // For video without thumbnail: return empty string (never stream raw video as a thumbnail)
