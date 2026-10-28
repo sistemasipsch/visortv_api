@@ -74,8 +74,8 @@ class MediaItem extends Model
             return $fn;
         }
 
-        // Local media served via high-speed streaming endpoint
-        $path = '/api/media/stream/' . rawurlencode($fn);
+        // Direct static media URL served directly by web server (Apache/LiteSpeed/Nginx) with zero PHP overhead
+        $path = '/storage/media/' . rawurlencode($fn);
         $baseUrl = config('app.url');
         if (!empty($baseUrl) && $baseUrl !== 'http://localhost' && $baseUrl !== 'http://127.0.0.1:8000') {
             return rtrim($baseUrl, '/') . $path;
@@ -96,7 +96,10 @@ class MediaItem extends Model
         }
 
         if ($this->type === 'image') {
-            $path = '/api/media/stream/' . rawurlencode($fn) . '?thumb=1';
+            $thumbFile = 'thumb_' . $fn;
+            $thumbPath = storage_path('app/public/media/' . $thumbFile);
+            $targetFn = file_exists($thumbPath) ? $thumbFile : $fn;
+            $path = '/storage/media/' . rawurlencode($targetFn);
             $baseUrl = config('app.url');
             if (!empty($baseUrl) && $baseUrl !== 'http://localhost' && $baseUrl !== 'http://127.0.0.1:8000') {
                 return rtrim($baseUrl, '/') . $path;
