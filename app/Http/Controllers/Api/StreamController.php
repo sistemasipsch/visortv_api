@@ -155,6 +155,7 @@ class StreamController extends Controller
             'Content-Type' => $mimeType,
             'Content-Length' => $length,
             'Accept-Ranges' => 'bytes',
+            'Content-Disposition' => 'inline; filename="' . basename($filePath) . '"',
             'Access-Control-Allow-Origin' => '*',
             'Access-Control-Expose-Headers' => 'Content-Range, Content-Length, Accept-Ranges, ETag, Last-Modified',
             'Cache-Control' => 'public, max-age=86400, stale-while-revalidate=604800',
@@ -172,6 +173,14 @@ class StreamController extends Controller
         }
 
         return new StreamedResponse(function () use ($filePath, $start, $length) {
+            // Prevent PHP timeout on heavy / 4K video files during 24/7 TV playback
+            if (function_exists('set_time_limit')) {
+                @set_time_limit(0);
+            }
+            if (function_exists('ignore_user_abort')) {
+                @ignore_user_abort(true);
+            }
+
             // Discard any active PHP output buffers to prevent memory spikes and streaming delays
             while (ob_get_level() > 0) {
                 ob_end_clean();
