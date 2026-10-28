@@ -5,19 +5,19 @@ namespace App\Services;
 class ImageOptimizerService
 {
     /**
-     * Max dimensions for TV display (Full 4K UHD: 3840x2160)
+     * Max dimensions for TV display (Full HD: 1920x1080 is optimal for Smart TV performance)
      */
-    protected const MAX_WIDTH = 3840;
-    protected const MAX_HEIGHT = 2160;
+    protected const MAX_WIDTH = 1920;
+    protected const MAX_HEIGHT = 1080;
 
     /**
      * Optimize an uploaded image:
      * 1. Fix EXIF orientation (prevents photos appearing rotated sideways on TV).
-     * 2. Downscale if greater than 4K UHD to preserve TV RAM and eliminate decoder lag.
+     * 2. Downscale if greater than Full HD to preserve TV RAM and eliminate decoder lag.
      * 3. Strip unnecessary metadata while preserving maximum visual clarity.
      * 4. Generate high-performance thumbnail for instant admin panel loading.
      */
-    public function optimize(string $filePath, string $extension): array
+    public function optimize(string $filePath, ?string $extension = null): array
     {
         if (!extension_loaded('gd') || !file_exists($filePath)) {
             return [
@@ -28,7 +28,7 @@ class ImageOptimizerService
             ];
         }
 
-        $ext = strtolower($extension);
+        $ext = strtolower($extension ?: pathinfo($filePath, PATHINFO_EXTENSION));
         if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp'])) {
             return [
                 'optimized' => false,
@@ -39,6 +39,12 @@ class ImageOptimizerService
         }
 
         try {
+            // Check memory limit and increase temporarily if processing massive PNG (>15MB)
+            $fileSizeBytes = @filesize($filePath) ?: 0;
+            if ($fileSizeBytes > 10 * 1024 * 1024) {
+                @ini_set('memory_limit', '512M');
+            }
+
             $image = $this->createImageFromFile($filePath, $ext);
             if (!$image) {
                 return ['optimized' => false, 'width' => 0, 'height' => 0, 'thumbnail' => null];
@@ -52,12 +58,12 @@ class ImageOptimizerService
             $origWidth = imagesx($image);
             $origHeight = imagesy($image);
 
-            // 2. Downscale if exceeding 4K UHD
+            // 2. Downscale if exceeding Full HD (1920x1080)
             $needsResize = ($origWidth > self::MAX_WIDTH || $origHeight > self::MAX_HEIGHT);
             if ($needsResize) {
                 $ratio = min(self::MAX_WIDTH / $origWidth, self::MAX_HEIGHT / $origHeight);
-                $newWidth = (int) round($origWidth * $ratio);
-                $newHeight = (int) round($origHeight * $ratio);
+                $newWidth = max(1, (int) round($origWidth * $ratio));
+                $newHeight = max(1, (int) round($origHeight * $ratio));
 
                 $resized = imagecreatetruecolor($newWidth, $newHeight);
                 $this->preserveTransparency($resized, $ext);
@@ -69,13 +75,16 @@ class ImageOptimizerService
             }
 
             // 3. Save optimized primary image
-            $this->saveImage($image, $filePath, $ext, 90);
+            $this->saveImage($image, $filePath, $ext, 88);
 
-            // 4. Generate thumbnail for admin preview (320x180 max)
+            // 4. Generate high-performance JPEG thumbnail for instant preview (320x180 max, ~10KB)
             $thumbnailPath = $this->getThumbnailPath($filePath);
-            $this->createThumbnailFromResource($image, $thumbnailPath, $ext, 320, 180);
+            $this->createThumbnailFromResource($image, $thumbnailPath, 'jpg', 320, 180);
 
             imagedestroy($image);
+
+            // Clear stat cache so filesize reflects optimized size
+            clearstatcache(true, $filePath);
 
             return [
                 'optimized' => true,
@@ -92,6 +101,31 @@ class ImageOptimizerService
                 'thumbnail' => null,
                 'error' => $e->getMessage(),
             ];
+        }
+    }
+
+    /**
+     * Create standalone thumbnail from an image file on disk
+     */
+    public function createThumbnail(string $sourcePath, string $targetPath, int $maxWidth = 320, int $maxHeight = 180): bool
+    {
+        if (!extension_loaded('gd') || !file_exists($sourcePath)) {
+            return false;
+        }
+
+        $ext = strtolower(pathinfo($sourcePath, PATHINFO_EXTENSION));
+        try {
+            $image = $this->createImageFromFile($sourcePath, $ext);
+            if (!$image) {
+                return false;
+            }
+
+            $targetExt = strtolower(pathinfo($targetPath, PATHINFO_EXTENSION)) ?: 'jpg';
+            $success = $this->createThumbnailFromResource($image, $targetPath, $targetExt, $maxWidth, $maxHeight);
+            imagedestroy($image);
+            return $success;
+        } catch (\Throwable) {
+            return false;
         }
     }
 
@@ -133,13 +167,13 @@ class ImageOptimizerService
     /**
      * Save GD image resource back to disk
      */
-    protected function saveImage($image, string $path, string $ext, int $quality = 90): bool
+    protected function saveImage($image, string $path, string $ext, int $quality = 88): bool
     {
         return match ($ext) {
             'jpg', 'jpeg' => imagejpeg($image, $path, $quality),
-            'png' => imagepng($image, $path, 8),
+            'png' => imagepng($image, $path, 7),
             'webp' => function_exists('imagewebp') ? imagewebp($image, $path, $quality) : false,
-            default => false,
+            default => imagejpeg($image, $path, $quality),
         };
     }
 
@@ -164,12 +198,20 @@ class ImageOptimizerService
         $srcW = imagesx($sourceImage);
         $srcH = imagesy($sourceImage);
 
-        $ratio = min($maxWidth / $srcW, $maxHeight / $srcH);
+        $ratio = min($maxWidth / max(1, $srcW), $maxHeight / max(1, $srcH));
         $thumbW = max(1, (int) round($srcW * $ratio));
         $thumbH = max(1, (int) round($srcH * $ratio));
 
         $thumb = imagecreatetruecolor($thumbW, $thumbH);
-        $this->preserveTransparency($thumb, $ext);
+
+        if (in_array($ext, ['png', 'webp'])) {
+            $this->preserveTransparency($thumb, $ext);
+        } else {
+            // White background for JPEG thumbnails
+            $white = imagecolorallocate($thumb, 255, 255, 255);
+            imagefilledrectangle($thumb, 0, 0, $thumbW, $thumbH, $white);
+        }
+
         imagecopyresampled($thumb, $sourceImage, 0, 0, 0, 0, $thumbW, $thumbH, $srcW, $srcH);
 
         $saved = $this->saveImage($thumb, $targetPath, $ext, 80);
@@ -179,12 +221,12 @@ class ImageOptimizerService
     }
 
     /**
-     * Compute thumbnail file path
+     * Compute thumbnail file path (always .jpg for ultra-lightweight ~10KB size)
      */
     public function getThumbnailPath(string $filePath): string
     {
         $dir = dirname($filePath);
-        $filename = basename($filePath);
-        return $dir . DIRECTORY_SEPARATOR . 'thumb_' . $filename;
+        $baseName = pathinfo($filePath, PATHINFO_FILENAME);
+        return $dir . DIRECTORY_SEPARATOR . 'thumb_' . $baseName . '.jpg';
     }
 }

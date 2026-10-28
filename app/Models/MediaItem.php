@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class MediaItem extends Model
 {
+    use HasFactory;
+
     protected $table = 'media_items';
 
     protected $fillable = [
@@ -26,12 +29,12 @@ class MediaItem extends Model
     ];
 
     protected $casts = [
-        'is_active' => 'boolean',
-        'order_num' => 'integer',
-        'duration' => 'integer',
-        'file_size' => 'integer',
         'sede_id' => 'integer',
         'uploaded_by_user_id' => 'integer',
+        'file_size' => 'integer',
+        'duration' => 'integer',
+        'order_num' => 'integer',
+        'is_active' => 'boolean',
     ];
 
     protected $appends = [
@@ -92,8 +95,8 @@ class MediaItem extends Model
         $baseName = pathinfo($fn, PATHINFO_FILENAME);
         // Candidate thumbnail file names
         $candidates = [
-            'thumb_' . $fn . '.jpg',
             'thumb_' . $baseName . '.jpg',
+            'thumb_' . $fn . '.jpg',
             'thumb_' . $fn,
         ];
 
@@ -104,9 +107,23 @@ class MediaItem extends Model
             }
         }
 
-        // For image type, fallback to original image
+        // For image type: Auto-generate lightweight 10KB JPEG thumbnail on the fly
         if ($this->type === 'image') {
-            return '/storage/media/' . rawurlencode($fn);
+            $origPath = storage_path('app/public/media/' . $fn);
+            $targetThumbPath = storage_path('app/public/media/thumb_' . $baseName . '.jpg');
+            if (file_exists($origPath) && extension_loaded('gd')) {
+                try {
+                    $optimizer = app(\App\Services\ImageOptimizerService::class);
+                    if ($optimizer->createThumbnail($origPath, $targetThumbPath, 320, 180)) {
+                        return '/storage/media/' . rawurlencode('thumb_' . $baseName . '.jpg');
+                    }
+                } catch (\Throwable) {
+                    // Fall through to dedicated thumbnail route
+                }
+            }
+
+            // Route fallback: Dedicated on-demand thumbnail generation endpoint
+            return '/api/media/' . $this->id . '/thumb';
         }
 
         // For video without thumbnail: return empty string (never stream raw video as a thumbnail)
@@ -119,10 +136,9 @@ class MediaItem extends Model
         if ($bytes <= 0) {
             return 'CDN / Enlace Web';
         }
-        $units = ['B', 'KB', 'MB', 'GB', 'TB'];
-        $pow = floor(log($bytes) / log(1024));
-        $pow = min((int)$pow, count($units) - 1);
-        $bytes /= pow(1024, $pow);
-        return round($bytes, 2) . ' ' . $units[$pow];
+        if ($bytes < 1024 * 1024) {
+            return round($bytes / 1024, 1) . ' KB';
+        }
+        return round($bytes / (1024 * 1024), 2) . ' MB';
     }
 }

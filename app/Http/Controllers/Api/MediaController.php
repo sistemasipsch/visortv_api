@@ -251,4 +251,67 @@ class MediaController extends Controller
             'message' => 'Orden de reproducción guardado exitosamente',
         ]);
     }
+
+    /**
+     * High-speed on-demand thumbnail delivery & generator
+     */
+    public function thumb($id)
+    {
+        $media = $this->mediaService->findById((int) $id);
+        if (!$media) {
+            return response()->json(['error' => 'Not found'], 404);
+        }
+
+        $fn = $media->filename;
+        if (empty($fn) || str_starts_with($fn, 'http://') || str_starts_with($fn, 'https://')) {
+            return redirect($fn ?: '/');
+        }
+
+        $baseName = pathinfo($fn, PATHINFO_FILENAME);
+        $candidates = [
+            storage_path('app/public/media/thumb_' . $baseName . '.jpg'),
+            storage_path('app/public/media/thumb_' . $fn . '.jpg'),
+            storage_path('app/public/media/thumb_' . $fn),
+        ];
+
+        foreach ($candidates as $cand) {
+            if (file_exists($cand)) {
+                return response()->file($cand, [
+                    'Content-Type' => 'image/jpeg',
+                    'Cache-Control' => 'public, max-age=31536000, immutable',
+                ]);
+            }
+        }
+
+        // If it's an image, generate thumbnail on the fly
+        $origPath = storage_path('app/public/media/' . $fn);
+        if (file_exists($origPath) && $media->type === 'image') {
+            $targetPath = storage_path('app/public/media/thumb_' . $baseName . '.jpg');
+            $optimizer = app(\App\Services\ImageOptimizerService::class);
+            if ($optimizer->createThumbnail($origPath, $targetPath, 320, 180)) {
+                return response()->file($targetPath, [
+                    'Content-Type' => 'image/jpeg',
+                    'Cache-Control' => 'public, max-age=31536000, immutable',
+                ]);
+            }
+
+            // Fallback to original image if creation failed
+            return response()->file($origPath);
+        }
+
+        return response()->json(['error' => 'Thumbnail not available'], 404);
+    }
+
+    /**
+     * Batch optimize images trigger
+     */
+    public function optimizeImages(Request $request): JsonResponse
+    {
+        $result = $this->mediaService->optimizeAllExistingImages();
+        return response()->json([
+            'success' => true,
+            'message' => "Proceso de optimización finalizado: {$result['optimized_count']} imágenes procesadas, {$result['formatted_saved']} liberados.",
+            'data' => $result,
+        ]);
+    }
 }

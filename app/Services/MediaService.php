@@ -82,7 +82,12 @@ class MediaService
         if ($type === 'image') {
             try {
                 $fullPath = Storage::disk('public')->path($path);
-                $this->imageOptimizer->optimize($fullPath);
+                $this->imageOptimizer->optimize($fullPath, $ext);
+
+                $finalSize = @filesize($fullPath);
+                if ($finalSize && $finalSize > 0) {
+                    $fileSize = $finalSize;
+                }
 
                 if (function_exists('getimagesize')) {
                     $imgInfo = @getimagesize($fullPath);
@@ -247,8 +252,11 @@ class MediaService
         // Remove physical files with non-blocking try-catch (Safe Unlink rule)
         if ($filename && !str_starts_with($filename, 'http://') && !str_starts_with($filename, 'https://')) {
             try {
+                $baseName = pathinfo($filename, PATHINFO_FILENAME);
                 Storage::disk('public')->delete('media/' . $filename);
                 Storage::disk('public')->delete('media/thumb_' . $filename);
+                Storage::disk('public')->delete('media/thumb_' . $filename . '.jpg');
+                Storage::disk('public')->delete('media/thumb_' . $baseName . '.jpg');
             } catch (\Throwable $e) {
                 Log::warning("No se pudo desvincular archivo físico {$filename} (puede estar en lectura activa): " . $e->getMessage());
             }
@@ -256,15 +264,19 @@ class MediaService
 
         $deleted = (bool) $media->delete();
 
-        $actorName = $actor ? $actor->name : 'Ashly Nicole';
-        AuditService::log(
-            'media.delete',
-            "{$actorName} eliminó el contenido '{$title}'",
-            null,
-            $sedeId,
-            ['deleted_filename' => $filename],
-            $actor
-        );
+        try {
+            $actorName = $actor ? $actor->name : 'Ashly Nicole';
+            AuditService::log(
+                'media.delete',
+                "{$actorName} eliminó el contenido '{$title}'",
+                null,
+                $sedeId,
+                ['deleted_filename' => $filename],
+                $actor
+            );
+        } catch (\Throwable) {
+            // Never block deletion if audit logging encounters an issue
+        }
 
         return $deleted;
     }
@@ -314,5 +326,65 @@ class MediaService
             ['total_items' => count($orders)],
             $actor
         );
+    }
+
+    /**
+     * Batch optimize all existing images in database and storage:
+     * - Downscales raw print-quality images (>1920px) to Full HD
+     * - Generates lightweight 10KB JPEG thumbnails (thumb_{baseName}.jpg)
+     * - Updates file_size and resolution in DB
+     */
+    public function optimizeAllExistingImages(): array
+    {
+        $images = MediaItem::where('type', 'image')->get();
+        $total = $images->count();
+        $optimized = 0;
+        $bytesSaved = 0;
+        $errors = [];
+
+        foreach ($images as $media) {
+            $fn = $media->filename;
+            if (!$fn || str_starts_with($fn, 'http://') || str_starts_with($fn, 'https://')) {
+                continue;
+            }
+
+            $fullPath = storage_path('app/public/media/' . $fn);
+            if (!file_exists($fullPath)) {
+                continue;
+            }
+
+            $beforeSize = @filesize($fullPath) ?: $media->file_size;
+
+            try {
+                $ext = pathinfo($fullPath, PATHINFO_EXTENSION);
+                $result = $this->imageOptimizer->optimize($fullPath, $ext);
+
+                if (!empty($result['optimized'])) {
+                    $afterSize = @filesize($fullPath) ?: $beforeSize;
+                    if ($beforeSize > $afterSize) {
+                        $bytesSaved += ($beforeSize - $afterSize);
+                    }
+
+                    $update = [
+                        'file_size' => $afterSize,
+                    ];
+                    if (!empty($result['width']) && !empty($result['height'])) {
+                        $update['resolution'] = "{$result['width']}x{$result['height']}";
+                    }
+                    $media->update($update);
+                    $optimized++;
+                }
+            } catch (\Throwable $e) {
+                $errors[] = "Error procesando {$fn}: " . $e->getMessage();
+            }
+        }
+
+        return [
+            'total_images' => $total,
+            'optimized_count' => $optimized,
+            'bytes_saved' => $bytesSaved,
+            'formatted_saved' => round($bytesSaved / (1024 * 1024), 2) . ' MB',
+            'errors' => $errors,
+        ];
     }
 }

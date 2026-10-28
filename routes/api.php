@@ -47,7 +47,9 @@ Route::post('/media', [MediaController::class, 'store']);
 Route::post('/media/add-url', [MediaController::class, 'addUrl']);
 Route::post('/media/reorder', [MediaController::class, 'reorder']);
 Route::post('/media/bulk-delete', [MediaController::class, 'bulkDelete']);
+Route::post('/media/optimize-images', [MediaController::class, 'optimizeImages']);
 Route::get('/media/{id}', [MediaController::class, 'show']);
+Route::get('/media/{id}/thumb', [MediaController::class, 'thumb']);
 Route::put('/media/{id}', [MediaController::class, 'update']);
 Route::delete('/media/{id}', [MediaController::class, 'destroy']);
 Route::post('/media/{id}/delete', [MediaController::class, 'destroy']); // Firewall/Proxy fallback

@@ -63,4 +63,31 @@ class ImageOptimizerTest extends TestCase
         @unlink($tempFile);
         @unlink($thumbFile);
     }
+
+    public function test_optimizer_handles_null_extension_and_create_thumbnail(): void
+    {
+        if (!extension_loaded('gd')) {
+            $this->markTestSkipped('GD extension not available');
+        }
+
+        $optimizer = new ImageOptimizerService();
+        $tempFile = tempnam(sys_get_temp_dir(), 'test_img2_') . '.jpg';
+        $thumbFile = tempnam(sys_get_temp_dir(), 'test_thumb2_') . '.jpg';
+
+        $im = imagecreatetruecolor(200, 200);
+        imagejpeg($im, $tempFile, 90);
+        imagedestroy($im);
+
+        // Call without extension parameter
+        $result = $optimizer->optimize($tempFile);
+        $this->assertTrue($result['optimized']);
+
+        $thumbOk = $optimizer->createThumbnail($tempFile, $thumbFile, 100, 100);
+        $this->assertTrue($thumbOk);
+        $this->assertFileExists($thumbFile);
+
+        @unlink($tempFile);
+        @unlink($thumbFile);
+        @unlink($optimizer->getThumbnailPath($tempFile));
+    }
 }
