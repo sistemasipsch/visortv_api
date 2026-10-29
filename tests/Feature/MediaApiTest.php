@@ -109,4 +109,43 @@ class MediaApiTest extends TestCase
         $filename = $response->json('data.0.filename');
         \Illuminate\Support\Facades\Storage::disk('public')->assertExists('media/' . $filename);
     }
+
+    public function test_rejects_incompatible_mkv_video_file(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('public');
+
+        $sede = Sede::first();
+        $this->assertNotNull($sede);
+
+        $fakeMkv = \Illuminate\Http\UploadedFile::fake()->create('pelicula.mkv', 15000, 'video/x-matroska');
+
+        $response = $this->postJson('/api/media', [
+            'sede_id' => $sede->id,
+            'files' => [$fakeMkv],
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['files.0']);
+    }
+
+    public function test_accepts_valid_jpg_and_png_images(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('public');
+
+        $sede = Sede::first();
+        $this->assertNotNull($sede);
+
+        $fakeJpg = \Illuminate\Http\UploadedFile::fake()->create('anuncio.jpg', 500, 'image/jpeg');
+        $fakePng = \Illuminate\Http\UploadedFile::fake()->create('logo.png', 500, 'image/png');
+
+        $response = $this->postJson('/api/media', [
+            'sede_id' => $sede->id,
+            'files' => [$fakeJpg, $fakePng],
+        ]);
+
+        $response->assertStatus(201)
+            ->assertJson(['success' => true])
+            ->assertJsonPath('data.0.type', 'image')
+            ->assertJsonPath('data.1.type', 'image');
+    }
 }

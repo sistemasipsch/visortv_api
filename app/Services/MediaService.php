@@ -56,9 +56,13 @@ class MediaService
         $originalName = $file->getClientOriginalName();
         $fileSize = $file->getSize() ?: 0;
 
-        $videoExtensions = ['mp4', 'webm', 'mov', 'm4v', 'avi', 'mkv', 'ogg'];
+        $videoExtensions = ['mp4'];
         $isVideo = str_starts_with($clientMime, 'video/') || in_array($ext, $videoExtensions);
         $type = $isVideo ? 'video' : 'image';
+
+        // Enforce strictly standardized extensions for Smart TVs
+        $sanitizedExt = $isVideo ? 'mp4' : (in_array($ext, ['png']) ? 'png' : 'jpg');
+        $mimeType = $isVideo ? 'video/mp4' : ($sanitizedExt === 'png' ? 'image/png' : 'image/jpeg');
 
         // Auto-detect or sanitize title
         $title = !empty($attributes['title'])
@@ -71,7 +75,7 @@ class MediaService
         // Unique filename
         $timestamp = time();
         $random = Str::random(8);
-        $storedFilename = "media_{$timestamp}_{$random}." . ($ext ?: ($isVideo ? 'mp4' : 'jpg'));
+        $storedFilename = "media_{$timestamp}_{$random}.{$sanitizedExt}";
 
         // Save to public storage disk
         $path = $file->storeAs('media', $storedFilename, 'public');
@@ -128,7 +132,7 @@ class MediaService
             'type' => $type,
             'filename' => $storedFilename,
             'original_name' => $originalName,
-            'mime_type' => $clientMime,
+            'mime_type' => $mimeType,
             'file_size' => $fileSize,
             'duration' => $duration,
             'fit_mode' => $fitMode,

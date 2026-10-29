@@ -101,10 +101,16 @@ class OptimizeMediaVideosCommand extends Command
             $originalSize = $file->getSize();
             $totalOriginal += $originalSize;
 
-            $this->line("Procesando: <comment>{$filename}</comment> (" . $this->formatBytes($originalSize) . ")...");
+            $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+            $baseName = pathinfo($filename, PATHINFO_FILENAME);
+            $isNotMp4 = ($ext !== 'mp4');
+            $finalTargetFilename = $baseName . '.mp4';
+            $finalTargetPath = $mediaDir . DIRECTORY_SEPARATOR . $finalTargetFilename;
 
-            // Nombre temporal de salida
-            $tempOutput = $mediaDir . DIRECTORY_SEPARATOR . 'temp_opt_' . $filename;
+            $this->line("Procesando: <comment>{$filename}</comment> (" . $this->formatBytes($originalSize) . ")" . ($isNotMp4 ? " -> Convirtiendo a MP4 para Smart TV" : "") . "...");
+
+            // Nombre temporal de salida (siempre en contenedor MP4 con FastStart)
+            $tempOutput = $mediaDir . DIRECTORY_SEPARATOR . 'temp_opt_' . $finalTargetFilename;
             if (File::exists($tempOutput)) {
                 @unlink($tempOutput);
             }
@@ -123,16 +129,21 @@ class OptimizeMediaVideosCommand extends Command
             if ($returnCode === 0 && File::exists($tempOutput)) {
                 $newSize = filesize($tempOutput);
 
-                if ($newSize > 0 && ($newSize < $originalSize || $this->option('force'))) {
-                    $savedPercent = round((1 - ($newSize / $originalSize)) * 100, 1);
+                if ($newSize > 0 && ($newSize < $originalSize || $this->option('force') || $isNotMp4)) {
+                    $savedPercent = $originalSize > 0 ? round((1 - ($newSize / $originalSize)) * 100, 1) : 0;
                     @unlink($originalPath);
-                    rename($tempOutput, $originalPath);
+                    if (File::exists($finalTargetPath) && $finalTargetPath !== $originalPath) {
+                        @unlink($finalTargetPath);
+                    }
+                    rename($tempOutput, $finalTargetPath);
 
-                    $this->info("  [OK] Reducido de " . $this->formatBytes($originalSize) . " a " . $this->formatBytes($newSize) . " ({$savedPercent}% de ahorro)");
+                    $this->info("  [OK] Convertido/optimizado a {$finalTargetFilename}: " . $this->formatBytes($newSize) . " ({$savedPercent}% de variacion)");
 
                     // Actualizar registro en base de datos si existe
                     $mediaItem = MediaItem::where('filename', $filename)->first();
                     if ($mediaItem) {
+                        $mediaItem->filename = $finalTargetFilename;
+                        $mediaItem->mime_type = 'video/mp4';
                         $mediaItem->file_size = $newSize;
                         $mediaItem->save();
                     }
@@ -152,12 +163,14 @@ class OptimizeMediaVideosCommand extends Command
             }
 
             // Asegurar que exista miniatura JPEG ultraliviana (8 KB)
-            $thumbPath = $mediaDir . DIRECTORY_SEPARATOR . 'thumb_' . $filename . '.jpg';
+            $actualVideoPath = File::exists($finalTargetPath) ? $finalTargetPath : $originalPath;
+            $actualVideoName = File::exists($finalTargetPath) ? $finalTargetFilename : $filename;
+            $thumbPath = $mediaDir . DIRECTORY_SEPARATOR . 'thumb_' . $actualVideoName . '.jpg';
             if (!file_exists($thumbPath) || $this->option('force')) {
                 $thumbCmd = sprintf(
                     '"%s" -ss 00:00:01 -i "%s" -vframes 1 -vf "scale=320:-1" -q:v 3 "%s" -y 2>&1',
                     $ffmpegBinary,
-                    $originalPath,
+                    $actualVideoPath,
                     $thumbPath
                 );
                 @exec($thumbCmd);
